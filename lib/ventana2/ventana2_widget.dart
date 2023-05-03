@@ -1,29 +1,20 @@
 import 'dart:convert';
-
-import 'package:auto_size_text/auto_size_text.dart';
+import 'package:flutter/services.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:image_picker/image_picker.dart';
-
-import '/flutter_flow/flutter_flow_animations.dart';
-import '/flutter_flow/flutter_flow_drop_down.dart';
-import '/flutter_flow/flutter_flow_place_picker.dart';
+import '../my_flutter_app_icons.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
-import '/flutter_flow/place.dart';
-import '/flutter_flow/upload_media.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-//import 'package:geocoding/geocoding.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 import 'ventana2_model.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:image/image.dart' as img;
+import 'package:http/http.dart' as http;
 export 'ventana2_model.dart';
-
 
 class Ventana2Widget extends StatefulWidget {
   const Ventana2Widget({
@@ -44,7 +35,12 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
   String address = "";
-  XFile? _imageFile;
+  File? _image;
+  bool b_construction = false;
+  bool b_obstacles = false;
+  bool b_pavement = false;
+  bool b_ramp = false;
+  bool b_stairs = false;
 
   Future<void> _obtenerUbicacion() async {
     // Obtener la ubicación actual del dispositivo
@@ -59,7 +55,6 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
     Placemark place = placemarks[0];
 
     // Obtener la dirección completa
-
     setState(() {
       address = '${place.street}, ${place.postalCode}, ${place.locality}, ${place.country}';
     });
@@ -69,6 +64,60 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
     print('Direccion: $address');
 
   }
+
+  Future<void> infer(File imageFile) async {
+    var imageBytes = await imageFile.readAsBytes();
+    var imageFormated = base64.encode(imageBytes);
+
+    final apiKey = 'eUgAAYZBwsHc4IlF7ui2'; // Your API Key
+    final modelEndpoint = 'sidewalk-accesibility/2'; // Set model endpoint (Found in Dataset URL)
+
+    // Construct the URL
+    final uploadURL =
+        'https://detect.roboflow.com/$modelEndpoint?api_key=$apiKey&name=YOUR_IMAGE.jpg';
+
+    // Http Request
+    final response = await HttpClient().postUrl(Uri.parse(uploadURL))
+      ..headers.contentType = ContentType.parse('application/x-www-form-urlencoded')
+      ..headers.contentLength = imageFormated.length
+      ..write(imageFormated);
+
+    // Get Response
+    final responseBody = await response.close();
+    await utf8.decodeStream(responseBody).then(print);
+  }
+
+
+  Future<void> _tomarFoto() async {
+    final imagePicker = ImagePicker();
+    final pickedImage = await imagePicker.pickImage(source: ImageSource.camera);
+    if (pickedImage != null) {
+
+      File imageFile = File(pickedImage.path);
+
+      String upload_url = [
+        "https://detect.roboflow.com/",
+        "sidewalk-accesibility",
+        "/",
+        "2",
+        "?api_key=",
+        "eUgAAYZBwsHc4IlF7ui2",
+        "&format=image",
+        "&stroke=2"
+      ].join();
+
+      infer(imageFile);
+
+      setState(() {
+        _image = imageFile;
+      });
+
+    }
+  }
+
+  void _sendRequest() {
+  }
+
   @override
   void initState() {
     super.initState();
@@ -77,12 +126,6 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
     // On page load action.
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       _obtenerUbicacion();
-    });
-  }
-
-  Future<void> _tomarFoto() async {
-    _imageFile = (await ImagePicker().pickImage(source: ImageSource.camera));
-    setState(() {
     });
   }
 
@@ -146,69 +189,85 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
                     showLoadingIndicator: false,
                   ),
                   Padding(
-                    padding: EdgeInsetsDirectional.fromSTEB(0, 15, 0, 0),
+                    padding: EdgeInsetsDirectional.fromSTEB(0, 15, 0, 15),
                     child: InkWell(
                       onTap: () => _tomarFoto(),
                       child: Container(
                         width: 400,
                         height: 400,
-                        child: _imageFile != null
-                        ? Image.file(File(_imageFile!.path),
+                        child: _image != null
+                            ? Image.file(
+                          _image!,
+                          fit: BoxFit.cover,
+                        )
+                            : Image.asset('assets/images/emptyState@2x.png',
                           fit: BoxFit.cover, // ajuste la imagen para cubrir el widget
                           width: double.infinity, // ancho máximo disponible
                           height: double.infinity,)
-                        : Image.asset('assets/images/emptyState@2x.png',
-                          fit: BoxFit.cover, // ajuste la imagen para cubrir el widget
-                          width: double.infinity, // ancho máximo disponible
-                          height: double.infinity,), // ICONO DE AÑADIR IMAGEN
                       ),
                   )),
-                  Padding(
-                    padding: EdgeInsetsDirectional.fromSTEB(0, 15, 0, 0),
-                    child: FlutterFlowDropDown<String>(
-                      options: ['Curb', 'Streetlight', 'Tree'],
-                      onChanged: (val) => setState(() => _model.obsValue = val),
-                      width: double.infinity,
-                      height: 60,
-                      textStyle: FlutterFlowTheme.of(context).bodyText1,
-                      hintText: 'Type of obstacle',
-                      icon: Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        color: FlutterFlowTheme.of(context).secondaryText,
-                        size: 15,
+                  Row(
+                    mainAxisSize: MainAxisSize.max,
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      IconButton(
+                        iconSize: 30.0,
+                        color:  b_construction ? Color(0xFF4B39EF) : Colors.black,
+                        icon: Icon(CustomIcons.construction),
+                        onPressed: () {
+                          setState(() {
+                            b_construction = !b_construction;
+                          });
+                        },
                       ),
-                      fillColor:
-                      FlutterFlowTheme.of(context).secondaryBackground,
-                      elevation: 2,
-                      borderColor:
-                      FlutterFlowTheme.of(context).primaryBackground,
-                      borderWidth: 2,
-                      borderRadius: 8,
-                      margin: EdgeInsetsDirectional.fromSTEB(20, 20, 12, 20),
-                      hidesUnderline: true,
-                    ),
-                  ),
-                ],
+                      IconButton(
+                        iconSize: 30.0,
+                        color:  b_obstacles ? Color(0xFF4B39EF) : Colors.black,
+                        icon: Icon(CustomIcons.obstacles),
+                        onPressed: () {
+                          setState(() {
+                            b_obstacles = !b_obstacles;
+                          });
+                        },
+                      ),
+                      IconButton(
+                        iconSize: 30.0,
+                        color:  b_pavement ? Color(0xFF4B39EF) : Colors.black,
+                        icon: Icon(CustomIcons.pavement),
+                        onPressed: () {
+                          setState(() {
+                            b_pavement = !b_pavement;
+                          });
+                        },
+                      ),
+                      IconButton(
+                        iconSize: 30.0,
+                        color:  b_ramp ? Color(0xFF4B39EF) : Colors.black,
+                        icon: Icon(CustomIcons.ramp),
+                        onPressed: () {
+                          setState(() {
+                            b_ramp = !b_ramp;
+                          });
+                        },
+                      ),
+                      IconButton(
+                        iconSize: 30.0,
+                        color:  b_stairs ? Color(0xFF4B39EF) : Colors.black,
+                        icon: Icon(CustomIcons.stairs),
+                        onPressed: () {
+                          setState(() {
+                            b_stairs = !b_stairs;
+                          });
+                        },
+                      ),
+                    ]
+                  )
+                ], // Children
               ),
             ),
           ),
           FFButtonWidget(
-            onPressed: () async {
-              await showDialog(
-                context: context,
-                builder: (alertDialogContext) {
-                  return AlertDialog(
-                    content: Text('Ticket created successfully'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(alertDialogContext),
-                        child: Text('Ok'),
-                      ),
-                    ],
-                  );
-                },
-              );
-            },
+            onPressed: _sendRequest ,
             text: 'Create issue',
             options: FFButtonOptions(
               width: 270,
