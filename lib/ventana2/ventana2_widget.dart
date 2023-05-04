@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:image_picker/image_picker.dart';
@@ -11,10 +12,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'ventana2_model.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image/image.dart' as img;
 import 'package:http/http.dart' as http;
 export 'ventana2_model.dart';
+
+
 
 class Ventana2Widget extends StatefulWidget {
   const Ventana2Widget({
@@ -36,11 +38,15 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
 
   String address = "";
   File? _image;
-  bool b_construction = false;
-  bool b_obstacles = false;
-  bool b_pavement = false;
-  bool b_ramp = false;
-  bool b_stairs = false;
+
+  List<String> _selectedOptions = [];
+  final List<String> _options = [
+    'suelo inestable',
+    'obstáculos',
+    'rampa peligrosa',
+    'ausencia de rampa',
+    'inaccesible por obras',
+  ];
 
   Future<void> _obtenerUbicacion() async {
     // Obtener la ubicación actual del dispositivo
@@ -65,7 +71,7 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
 
   }
 
-  Future<void> infer(File imageFile) async {
+  Future<String> infer(File imageFile) async {
     var imageBytes = await imageFile.readAsBytes();
     var imageFormated = base64.encode(imageBytes);
 
@@ -84,38 +90,62 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
 
     // Get Response
     final responseBody = await response.close();
-    await utf8.decodeStream(responseBody).then(print);
+    return await utf8.decodeStream(responseBody);
   }
 
+  Future<ui.Image> loadImage(File imageFile) async {
+    final bytes = await imageFile.readAsBytes();
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frameInfo = await codec.getNextFrame();
+    return frameInfo.image;
+  }
 
   Future<void> _tomarFoto() async {
+
+    //Reset icons
+    setState(() {
+      _selectedOptions.clear();
+    });
+
+    //Take photo
     final imagePicker = ImagePicker();
     final pickedImage = await imagePicker.pickImage(source: ImageSource.camera);
     if (pickedImage != null) {
-
       File imageFile = File(pickedImage.path);
 
-      String upload_url = [
-        "https://detect.roboflow.com/",
-        "sidewalk-accesibility",
-        "/",
-        "2",
-        "?api_key=",
-        "eUgAAYZBwsHc4IlF7ui2",
-        "&format=image",
-        "&stroke=2"
-      ].join();
+      //Predictions
+      final res = await infer(imageFile);
+      updateIcons((res));
 
-      infer(imageFile);
-
+      //Image
       setState(() {
         _image = imageFile;
       });
-
     }
+
+  }
+
+  void updateIcons(String res) {
+
+    //Parsea el json
+    Map<String, dynamic> json = jsonDecode(res);
+    List<dynamic> predictions = json['predictions'];
+    Set<String> uniqueClasses = Set();
+    for (dynamic prediction in predictions) {
+      String classValue = prediction['class'];
+      uniqueClasses.add(classValue);
+    }
+    print(uniqueClasses);
+
+    // Actualizar el estado de los iconos correspondientes
+    setState(() {
+     _selectedOptions = uniqueClasses.toList();
+    });
   }
 
   void _sendRequest() {
+    //Etiquetas obtenidas
+    print(_selectedOptions);
   }
 
   @override
@@ -142,11 +172,19 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
       key: scaffoldKey,
       backgroundColor: FlutterFlowTheme.of(context).secondaryBackground,
       appBar: AppBar(
-        backgroundColor: FlutterFlowTheme.of(context).secondaryBackground,
+        backgroundColor: Color(0xFF4B39EF),
         automaticallyImplyLeading: false,
+        title: Text(
+          'EASY ON WAY',
+          style:TextStyle(
+            fontFamily: 'Lexend Deca',
+            color: Colors.white,
+            fontSize: 35,
+          ),
+        ),
         actions: [],
         centerTitle: true,
-        elevation: 0,
+        elevation: 4,
       ),
       body: Column(
         mainAxisSize: MainAxisSize.max,
@@ -162,7 +200,7 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
                   FFButtonWidget(
                     onPressed: () {
                     },
-                    text: address == "" ? 'Getting ubication ...' : address,
+                    text: address == "" ? 'Obteniendo ubicación ...' : address,
                     icon: Icon(
                       Icons.location_on,
                       color: Color(0xFF4B39EF),
@@ -176,7 +214,7 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
                       color: Colors.white,
                       textStyle:
                       FlutterFlowTheme.of(context).subtitle2.override(
-                        fontFamily: 'Poppins',
+                        fontFamily: 'Lexend Deca',
                         color: Colors.black,
                       ),
                       elevation: 2,
@@ -206,61 +244,37 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
                           height: double.infinity,)
                       ),
                   )),
-                  Row(
-                    mainAxisSize: MainAxisSize.max,
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      IconButton(
-                        iconSize: 30.0,
-                        color:  b_construction ? Color(0xFF4B39EF) : Colors.black,
-                        icon: Icon(CustomIcons.construction),
-                        onPressed: () {
+
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 8.0,
+                    children: _options.map((option) {
+                      return ChoiceChip(
+                        elevation: 4,
+                        label: Text(
+                          option,
+                          style: TextStyle(
+                          fontFamily: 'Lexend Deca',
+                          fontSize: 13.0,
+                          color: _selectedOptions.contains(option)
+                          ? Colors.white
+                          : Colors.black,
+                      )),
+                        backgroundColor:
+                        _selectedOptions.contains(option) ? Color(0xFF4B39EF) : null,
+                        selectedColor: Color(0xFF4B39EF),
+                        selected: _selectedOptions.contains(option),
+                        onSelected: (selected) {
                           setState(() {
-                            b_construction = !b_construction;
+                            if (selected) {
+                              _selectedOptions.add(option);
+                            } else {
+                              _selectedOptions.remove(option);
+                            }
                           });
                         },
-                      ),
-                      IconButton(
-                        iconSize: 30.0,
-                        color:  b_obstacles ? Color(0xFF4B39EF) : Colors.black,
-                        icon: Icon(CustomIcons.obstacles),
-                        onPressed: () {
-                          setState(() {
-                            b_obstacles = !b_obstacles;
-                          });
-                        },
-                      ),
-                      IconButton(
-                        iconSize: 30.0,
-                        color:  b_pavement ? Color(0xFF4B39EF) : Colors.black,
-                        icon: Icon(CustomIcons.pavement),
-                        onPressed: () {
-                          setState(() {
-                            b_pavement = !b_pavement;
-                          });
-                        },
-                      ),
-                      IconButton(
-                        iconSize: 30.0,
-                        color:  b_ramp ? Color(0xFF4B39EF) : Colors.black,
-                        icon: Icon(CustomIcons.ramp),
-                        onPressed: () {
-                          setState(() {
-                            b_ramp = !b_ramp;
-                          });
-                        },
-                      ),
-                      IconButton(
-                        iconSize: 30.0,
-                        color:  b_stairs ? Color(0xFF4B39EF) : Colors.black,
-                        icon: Icon(CustomIcons.stairs),
-                        onPressed: () {
-                          setState(() {
-                            b_stairs = !b_stairs;
-                          });
-                        },
-                      ),
-                    ]
+                      );
+                    }).toList(),
                   )
                 ], // Children
               ),
@@ -268,7 +282,7 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
           ),
           FFButtonWidget(
             onPressed: _sendRequest ,
-            text: 'Create issue',
+            text: 'Crear incidencia',
             options: FFButtonOptions(
               width: 270,
               height: 50,
@@ -278,7 +292,7 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
               textStyle: FlutterFlowTheme.of(context).subtitle2.override(
                 fontFamily: 'Lexend Deca',
                 color: Colors.white,
-                fontSize: 16,
+                fontSize: 20,
                 fontWeight: FontWeight.w500,
               ),
               elevation: 3,
