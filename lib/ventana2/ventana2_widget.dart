@@ -15,8 +15,10 @@ import 'ventana2_model.dart';
 import 'package:image/image.dart' as img;
 import 'package:http/http.dart' as http;
 export 'ventana2_model.dart';
-
-
+import 'package:webdriver/async_core.dart';
+import 'package:html/parser.dart' as htmlParser;
+import 'package:html/dom.dart' as htmlDom;
+import 'package:future_progress_dialog/future_progress_dialog.dart';
 
 class Ventana2Widget extends StatefulWidget {
   const Ventana2Widget({
@@ -48,6 +50,8 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
     'inaccesible por obras',
   ];
 
+  bool showProgressIndicator = false;
+
   Future<void> _obtenerUbicacion() async {
     // Obtener la ubicación actual del dispositivo
     Position position = await Geolocator.getCurrentPosition();
@@ -75,8 +79,8 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
     var imageBytes = await imageFile.readAsBytes();
     var imageFormated = base64.encode(imageBytes);
 
-    final apiKey = 'eUgAAYZBwsHc4IlF7ui2'; // Your API Key
-    final modelEndpoint = 'sidewalk-accesibility/2'; // Set model endpoint (Found in Dataset URL)
+    final apiKey = '1rlted2kCU2CcgeOrHwe'; // Your API Key
+    final modelEndpoint = 'accesibility-street/11'; // Set model endpoint (Found in Dataset URL)
 
     // Construct the URL
     final uploadURL =
@@ -113,14 +117,21 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
     if (pickedImage != null) {
       File imageFile = File(pickedImage.path);
 
+      //Image
+      setState(() {
+        _image = imageFile;
+        showProgressIndicator = true;
+      });
+
       //Predictions
       final res = await infer(imageFile);
       updateIcons((res));
 
-      //Image
+      //Carga
       setState(() {
-        _image = imageFile;
+        showProgressIndicator = false;
       });
+
     }
 
   }
@@ -143,10 +154,89 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
     });
   }
 
-  void _sendRequest() {
-    //Etiquetas obtenidas
-    print(_selectedOptions);
+  Future<void> _sendRequest() async {
+
+    setState(() {
+      showProgressIndicator = true;
+    });
+
+    //Datos direccion
+    List<String> partes = address.split(',');
+    partes = partes.map((parte) => parte.trim()).toList();
+    String calle = partes[0];
+    String cp = partes[1];
+    String ciudad = partes[2];
+
+    //Datos etiquetas
+    String opciones = _selectedOptions.toString();
+
+    String url = 'https://wicked-dogs-change.loca.lt/?calle=${Uri.encodeComponent(calle)}'
+        '&cp=${Uri.encodeComponent(cp)}'
+        '&ciudad=${Uri.encodeComponent(ciudad)}'
+        '&opciones=${Uri.encodeComponent(opciones)}';
+
+    print(url);
+
+    http.get(Uri.parse(url)).then((response) {
+
+      setState(() {
+        showProgressIndicator = false;
+      });
+
+      if (response.statusCode == 200) {
+        final document = htmlParser.parse(response.body);
+        var text = extractTextFromBody(document);
+        print('Texto extraído:');
+        print(text);
+        _showAlertDialog(context,text);
+      } else {
+        print('Error en la solicitud. Código de estado: ${response.statusCode}');
+        _showAlertDialog(context,"text");
+      }
+    }).catchError((error) {
+      print('Error en la solicitud: $error');
+    });
+
   }
+
+  String extractTextFromBody(htmlDom.Document document) {
+    final bodyElement = document.querySelector('body');
+    if (bodyElement != null) {
+      return bodyElement.text.trim();
+    } else {
+      return 'No se encontró el elemento <body>';
+    }
+  }
+
+  void _showAlertDialog(BuildContext context, String text) {
+    String dialogText;
+    if (text == 'Your data has been submitted.') {
+      dialogText = 'Incidencia creada correctamente';
+    } else {
+      dialogText = 'Error al crear incidencia. Inténtelo de nuevo más tarde';
+    }
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Respuesta del servidor'),
+          content: Text(dialogText),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child:  Text(
+                'Cerrar',
+                style: TextStyle(
+                  color:  Color(0xFF4B39EF),
+                ),
+              ),
+            ),
+          ],
+        );
+      });}
+
 
   @override
   void initState() {
@@ -189,6 +279,10 @@ class _Ventana2WidgetState extends State<Ventana2Widget>
       body: Column(
         mainAxisSize: MainAxisSize.max,
         children: [
+          Visibility(
+            visible: showProgressIndicator,
+            child: LinearProgressIndicator(color: Color(0xFF4B39EF), backgroundColor: Colors.white, minHeight: 5.0,),
+          ),
           Align(
             alignment: AlignmentDirectional(0, 0),
             child: Padding(
