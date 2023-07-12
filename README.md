@@ -14,7 +14,15 @@ Aplicación móvil con interfaz sencilla que notifica cualquier obstáculo detec
 
 ## Tecnologías usadas
 
-
+* Android Studio
+* Flutter
+* LabelMe
+* Google colab
+* Roboflow
+* Pycharm
+* Selenium
+* Flask
+* Git
 
 ## Limitaciones
 
